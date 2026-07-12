@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 from urllib import request
 
@@ -32,10 +34,63 @@ class TelegramBotApi:
 
     def call(self, method: str, payload: dict[str, Any]) -> dict[str, Any]:
         data = json.dumps(payload).encode()
+        return self._request_json(
+            method,
+            data,
+            headers={"Content-Type": "application/json"},
+        )
+
+    def send_document(
+        self,
+        chat_id: int,
+        caption: str,
+        document_path: Path,
+        *,
+        content_type: str = "text/plain; charset=utf-8",
+    ) -> dict[str, Any]:
+        """Upload one local file through Telegram's ``sendDocument`` method."""
+        boundary = uuid.uuid4().hex
+        crlf = b"\r\n"
+        body = bytearray()
+
+        def add_field(name: str, value: str) -> None:
+            body.extend(f"--{boundary}".encode())
+            body.extend(crlf)
+            body.extend(f'Content-Disposition: form-data; name="{name}"'.encode())
+            body.extend(crlf)
+            body.extend(crlf)
+            body.extend(value.encode())
+            body.extend(crlf)
+
+        add_field("chat_id", str(chat_id))
+        add_field("caption", caption[:1024])
+        body.extend(f"--{boundary}".encode())
+        body.extend(crlf)
+        body.extend(
+            (
+                'Content-Disposition: form-data; name="document"; '
+                f'filename="{document_path.name}"'
+            ).encode()
+        )
+        body.extend(crlf)
+        body.extend(f"Content-Type: {content_type}".encode())
+        body.extend(crlf)
+        body.extend(crlf)
+        body.extend(document_path.read_bytes())
+        body.extend(crlf)
+        body.extend(f"--{boundary}--".encode())
+        body.extend(crlf)
+        return self._request_json(
+            "sendDocument",
+            bytes(body),
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        )
+
+    def _request_json(self, method: str, data: bytes, *, headers: dict[str, str]) -> dict[str, Any]:
         req = request.Request(
             f"https://api.telegram.org/bot{self._token}/{method}",
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
         with request.urlopen(req, timeout=self._timeout) as response:
