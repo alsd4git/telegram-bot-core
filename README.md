@@ -2,6 +2,10 @@
 
 Small, dependency-free primitives shared by personal Telegram automations.
 
+## License
+
+MIT. See [LICENSE](LICENSE).
+
 The package intentionally does not implement a Telegram HTTP client or depend on
 a bot framework. Applications keep their existing transports while sharing the
 security-sensitive parts: parsing numeric IDs, fail-closed access policies, and

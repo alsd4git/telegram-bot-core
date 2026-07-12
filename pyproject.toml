@@ -3,7 +3,7 @@ name = "telegram-bot-core"
 version = "0.1.0"
 description = "Shared fail-closed Telegram authorization and message utilities"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 
 [build-system]
 requires = ["hatchling>=1.27,<2"]
