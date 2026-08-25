@@ -68,8 +68,7 @@ class TelegramBotApi:
         body.extend(crlf)
         body.extend(
             (
-                'Content-Disposition: form-data; name="document"; '
-                f'filename="{document_path.name}"'
+                f'Content-Disposition: form-data; name="document"; filename="{document_path.name}"'
             ).encode()
         )
         body.extend(crlf)

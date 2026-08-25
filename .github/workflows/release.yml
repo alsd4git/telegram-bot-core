@@ -25,7 +25,9 @@ jobs:
             echo "Tag $RELEASE_TAG does not match package version $PACKAGE_VERSION" >&2
             exit 1
           }
+          grep -F "## [$PACKAGE_VERSION]" CHANGELOG.md
       - run: uv sync --locked
+      - run: uv run ruff format --check .
       - run: uv run ruff check .
       - run: uv run pytest
       - run: uv build
