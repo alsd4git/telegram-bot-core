@@ -1,5 +1,9 @@
 # Telegram Bot Core
 
+[![CI](https://github.com/alsd4git/telegram-bot-core/actions/workflows/ci.yml/badge.svg)](https://github.com/alsd4git/telegram-bot-core/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/alsd4git/telegram-bot-core)](https://github.com/alsd4git/telegram-bot-core/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
+
 Small, dependency-free building blocks for personal Telegram bot automations.
 
 The package provides a synchronous Bot API client, fail-closed access policies,
