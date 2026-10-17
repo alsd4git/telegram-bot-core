@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import uuid
 from dataclasses import dataclass
@@ -19,6 +20,17 @@ class TelegramApiError(RuntimeError):
     error_code: int | None = None
     parameters: dict[str, Any] | None = None
     retry_after: int | None = None
+
+    def __post_init__(self) -> None:
+        # Retain the historical two-element BaseException.args.
+        RuntimeError.__init__(self, self.method, self.description)
+
+    def __reduce__(self) -> tuple[type[TelegramApiError], tuple[Any, ...]]:
+        # Rebuild all structured fields across pickle/process boundaries.
+        return (
+            type(self),
+            (self.method, self.description, self.error_code, self.parameters, self.retry_after),
+        )
 
     def __str__(self) -> str:
         return f"Telegram API {self.method} failed: {self.description}"
@@ -144,11 +156,23 @@ class TelegramBotApi:
             with request.urlopen(req, timeout=self._timeout) as response:
                 parsed = json.loads(response.read().decode("utf-8", errors="replace"))
         except error.HTTPError as exc:
-            # Telegram normally delivers Bot API errors with a non-2xx HTTP
-            # status. Preserve urllib's error for non-JSON or unrelated replies.
+            # Telegram often returns JSON with HTTP 4xx. urllib's HTTPError
+            # delegates read() to the original stream, so replace *all* of
+            # its read accessors after inspection to preserve the body for
+            # callers handling non-Telegram failures themselves.
             try:
-                parsed = json.loads(exc.read().decode("utf-8", errors="replace"))
-            except (OSError, ValueError):
+                body = exc.read()
+            except OSError:
+                raise exc
+            replay = io.BytesIO(body)
+            exc.fp = replay
+            exc.file = replay
+            exc.read = replay.read
+            exc.readline = replay.readline
+            exc.readlines = replay.readlines
+            try:
+                parsed = json.loads(body.decode("utf-8", errors="replace"))
+            except ValueError:
                 raise exc
             if isinstance(parsed, dict) and parsed.get("ok") is False:
                 raise _api_error(method, parsed, self._token, http_status=exc.code) from exc
