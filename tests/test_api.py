@@ -102,9 +102,7 @@ def test_http_rate_limit_is_structured_without_automatic_retry() -> None:
         {},
         io.BytesIO(body),
     )
-    with mock.patch.object(
-        api_module.request, "urlopen", side_effect=http_error
-    ) as urlopen:
+    with mock.patch.object(api_module.request, "urlopen", side_effect=http_error) as urlopen:
         with pytest.raises(TelegramApiError) as caught:
             TelegramBotApi("TOKEN").send_message(123, "hello")
 
