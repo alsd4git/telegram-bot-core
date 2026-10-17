@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Structured Telegram Bot API errors with status code, response parameters, and typed `retry_after`, including JSON error bodies returned with HTTP 400/429.
+- Redaction of the configured bot token from Telegram API error details.
+
 ## [0.1.0] - 2026-08-23
 
 ### Added
