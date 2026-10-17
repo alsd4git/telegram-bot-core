@@ -30,8 +30,7 @@ def _redact_token(value: Any, token: str) -> Any:
         return value.replace(token, "[REDACTED]")
     if isinstance(value, dict):
         return {
-            _redact_token(key, token): _redact_token(item, token)
-            for key, item in value.items()
+            _redact_token(key, token): _redact_token(item, token) for key, item in value.items()
         }
     if isinstance(value, list):
         return [_redact_token(item, token) for item in value]
