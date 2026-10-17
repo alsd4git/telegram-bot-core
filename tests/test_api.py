@@ -201,3 +201,88 @@ def test_legacy_api_error_constructor_remains_compatible() -> None:
     assert api_error.retry_after is None
     assert api_error.args == ("sendMessage", "bad request")
     assert str(api_error) == "Telegram API sendMessage failed: bad request"
+
+def test_get_updates_remains_message_only_by_default() -> None:
+    response = Response({"ok": True, "result": [{"update_id": 1, "message": {"text": "hi"}}]})
+    with mock.patch.object(api_module.request, "urlopen", return_value=response) as urlopen:
+        updates = TelegramBotApi("TOKEN").get_updates(offset=None, timeout=30)
+
+    assert updates == [{"update_id": 1, "message": {"text": "hi"}}]
+    assert json.loads(urlopen.call_args.args[0].data) == {
+        "timeout": 30,
+        "allowed_updates": ["message"],
+    }
+
+
+def test_get_updates_can_opt_into_callbacks_without_changing_message_handling() -> None:
+    response = Response({"ok": True, "result": [{"update_id": 2, "callback_query": {"id": "q"}}]})
+    with mock.patch.object(api_module.request, "urlopen", return_value=response) as urlopen:
+        updates = TelegramBotApi("TOKEN").get_updates(
+            offset=2, timeout=10, allowed_updates=("message", "callback_query")
+        )
+
+    assert updates[0]["callback_query"]["id"] == "q"
+    assert json.loads(urlopen.call_args.args[0].data) == {
+        "timeout": 10,
+        "offset": 2,
+        "allowed_updates": ["message", "callback_query"],
+    }
+
+
+@pytest.mark.parametrize("allowed", ["message", ["message", ""], [1]])
+def test_get_updates_rejects_invalid_allowed_updates(allowed: object) -> None:
+    with pytest.raises(ValueError):
+        TelegramBotApi("TOKEN").get_updates(offset=None, timeout=10, allowed_updates=allowed)
+
+
+def test_send_message_supports_optional_inline_keyboard_markup() -> None:
+    keyboard = {"inline_keyboard": [[{"text": "Details", "callback_data": "details"}]]}
+    with mock.patch.object(
+        api_module.request,
+        "urlopen",
+        return_value=Response({"ok": True, "result": {}}),
+    ) as urlopen:
+        TelegramBotApi("TOKEN").send_message(123, "Select", reply_markup=keyboard)
+
+    assert json.loads(urlopen.call_args.args[0].data) == {
+        "chat_id": 123,
+        "text": "Select",
+        "reply_markup": keyboard,
+    }
+
+
+def test_answer_callback_query_posts_acknowledgement_and_optional_options() -> None:
+    with mock.patch.object(
+        api_module.request,
+        "urlopen",
+        return_value=Response({"ok": True, "result": True}),
+    ) as urlopen:
+        TelegramBotApi("TOKEN").answer_callback_query(
+            "query-123", text="Done", show_alert=True, cache_time=5
+        )
+
+    req = urlopen.call_args.args[0]
+    assert req.full_url == "https://api.telegram.org/botTOKEN/answerCallbackQuery"
+    assert json.loads(req.data) == {
+        "callback_query_id": "query-123",
+        "text": "Done",
+        "show_alert": True,
+        "cache_time": 5,
+    }
+
+
+def test_answer_callback_query_default_payload_is_minimal() -> None:
+    with mock.patch.object(
+        api_module.request,
+        "urlopen",
+        return_value=Response({"ok": True, "result": True}),
+    ) as urlopen:
+        TelegramBotApi("TOKEN").answer_callback_query("query-123")
+
+    assert json.loads(urlopen.call_args.args[0].data) == {"callback_query_id": "query-123"}
+
+
+@pytest.mark.parametrize("query_id, cache_time", [("", 0), ("query", -1), ("query", True)])
+def test_answer_callback_query_rejects_invalid_arguments(query_id, cache_time) -> None:
+    with pytest.raises(ValueError):
+        TelegramBotApi("TOKEN").answer_callback_query(query_id, cache_time=cache_time)

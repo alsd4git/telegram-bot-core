@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -181,11 +182,56 @@ class TelegramBotApi:
             raise _api_error(method, parsed, self._token)
         return parsed
 
-    def send_message(self, chat_id: int, text: str) -> dict[str, Any]:
-        return self.call("sendMessage", {"chat_id": chat_id, "text": text})
+    def send_message(
+        self, chat_id: int, text: str, *, reply_markup: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {"chat_id": chat_id, "text": text}
+        if reply_markup is not None:
+            payload["reply_markup"] = reply_markup
+        return self.call("sendMessage", payload)
 
-    def get_updates(self, *, offset: int | None, timeout: int) -> list[dict[str, Any]]:
-        payload: dict[str, Any] = {"timeout": timeout, "allowed_updates": ["message"]}
+    def answer_callback_query(
+        self,
+        callback_query_id: str,
+        *,
+        text: str | None = None,
+        show_alert: bool = False,
+        url: str | None = None,
+        cache_time: int = 0,
+    ) -> dict[str, Any]:
+        """Acknowledge a callback; this does not execute its callback_data."""
+        if not isinstance(callback_query_id, str) or not callback_query_id:
+            raise ValueError("callback_query_id must be a non-empty string")
+        if type(cache_time) is not int or cache_time < 0:
+            raise ValueError("cache_time must be a non-negative integer")
+        payload: dict[str, Any] = {"callback_query_id": callback_query_id}
+        if text is not None:
+            payload["text"] = text
+        if show_alert:
+            payload["show_alert"] = True
+        if url is not None:
+            payload["url"] = url
+        if cache_time:
+            payload["cache_time"] = cache_time
+        return self.call("answerCallbackQuery", payload)
+
+    def get_updates(
+        self,
+        *,
+        offset: int | None,
+        timeout: int,
+        allowed_updates: Sequence[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Poll message updates by default; callback queries must be opted into."""
+        if allowed_updates is None:
+            requested_updates = ["message"]
+        else:
+            if isinstance(allowed_updates, (str, bytes)) or any(
+                not isinstance(item, str) or not item for item in allowed_updates
+            ):
+                raise ValueError("allowed_updates must be a sequence of update type names")
+            requested_updates = list(allowed_updates)
+        payload: dict[str, Any] = {"timeout": timeout, "allowed_updates": requested_updates}
         if offset is not None:
             payload["offset"] = offset
         result = self.call("getUpdates", payload).get("result", [])
