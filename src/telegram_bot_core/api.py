@@ -58,11 +58,7 @@ def _api_error(
     raw_parameters = payload.get("parameters")
     parameters = _redact_token(raw_parameters, token) if isinstance(raw_parameters, dict) else None
     retry_after = parameters.get("retry_after") if parameters is not None else None
-    if (
-        isinstance(retry_after, bool)
-        or not isinstance(retry_after, int)
-        or retry_after < 0
-    ):
+    if isinstance(retry_after, bool) or not isinstance(retry_after, int) or retry_after < 0:
         retry_after = None
 
     return TelegramApiError(
