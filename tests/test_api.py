@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import pickle
 from pathlib import Path
 from unittest import mock
 from urllib import error
@@ -84,6 +85,14 @@ def test_structured_api_error_retains_code_and_safe_parameters() -> None:
     assert api_error.retry_after is None
     assert "TOKEN" not in str(api_error)
     assert "TOKEN" not in repr(api_error)
+    assert api_error.args == ("sendMessage", "Bad Request: bot [REDACTED] rejected")
+
+    restored = pickle.loads(pickle.dumps(api_error))
+    assert isinstance(restored, TelegramApiError)
+    assert restored.args == api_error.args
+    assert restored.error_code == api_error.error_code
+    assert restored.parameters == api_error.parameters
+    assert restored.retry_after == api_error.retry_after
 
 
 def test_http_rate_limit_is_structured_without_automatic_retry() -> None:
@@ -158,6 +167,23 @@ def test_non_json_http_errors_remain_urllib_http_errors() -> None:
             TelegramBotApi("TOKEN").send_message(123, "hello")
 
     assert caught.value.code == 502
+    assert caught.value.read() == b"not JSON"
+
+
+def test_unrelated_json_http_error_keeps_readable_body() -> None:
+    body = b'{"ok": true, "result": {"irrelevant": 1}}'
+    http_error = error.HTTPError(
+        "https://api.telegram.org/botTOKEN/sendMessage",
+        400,
+        "Bad Request",
+        {},
+        io.BytesIO(body),
+    )
+    with mock.patch.object(api_module.request, "urlopen", side_effect=http_error):
+        with pytest.raises(error.HTTPError) as caught:
+            TelegramBotApi("TOKEN").send_message(123, "hello")
+
+    assert caught.value.read() == body
 
 
 def test_invalid_success_payload_is_a_structured_api_error() -> None:
@@ -173,4 +199,5 @@ def test_legacy_api_error_constructor_remains_compatible() -> None:
     assert api_error.error_code is None
     assert api_error.parameters is None
     assert api_error.retry_after is None
+    assert api_error.args == ("sendMessage", "bad request")
     assert str(api_error) == "Telegram API sendMessage failed: bad request"
