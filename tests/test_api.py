@@ -202,6 +202,7 @@ def test_legacy_api_error_constructor_remains_compatible() -> None:
     assert api_error.args == ("sendMessage", "bad request")
     assert str(api_error) == "Telegram API sendMessage failed: bad request"
 
+
 def test_get_updates_remains_message_only_by_default() -> None:
     response = Response({"ok": True, "result": [{"update_id": 1, "message": {"text": "hi"}}]})
     with mock.patch.object(api_module.request, "urlopen", return_value=response) as urlopen:
