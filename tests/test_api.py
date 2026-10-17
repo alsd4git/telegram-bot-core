@@ -3,8 +3,8 @@ from __future__ import annotations
 import io
 import json
 from pathlib import Path
-from urllib import error
 from unittest import mock
+from urllib import error
 
 import pytest
 
