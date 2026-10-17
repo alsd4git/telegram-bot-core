@@ -20,7 +20,7 @@ for scripts that do not need a full bot framework.
 The package is currently distributed through GitHub releases, not PyPI:
 
 ```bash
-uv add "telegram-bot-core @ git+https://github.com/alsd4git/telegram-bot-core.git@v0.1.0"
+uv add "telegram-bot-core @ git+https://github.com/alsd4git/telegram-bot-core.git@v0.2.0"
 ```
 
 Applications in this account use the Git tag as their dependency reference. A
