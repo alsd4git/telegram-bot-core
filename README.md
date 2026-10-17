@@ -63,11 +63,63 @@ environment file or secret store owned by the application.
   positional arguments.
 - `split_telegram_message()` splits text on line boundaries without exceeding
   the caller-provided message limit.
+- `TelegramBotApi.get_updates()` defaults to message-only updates and accepts
+  an optional `allowed_updates` sequence to opt into `callback_query` events.
+- `parse_telegram_callback_query()` returns the callback ID, sender/chat/message
+  IDs and opaque callback data; it never interprets or executes the data.
+- `inline_keyboard()` builds callback-only markup and validates Telegram's
+  1–64 byte UTF-8 `callback_data` constraint.
+- `TelegramBotApi.send_message(..., reply_markup=...)` can send inline buttons;
+  `TelegramBotApi.answer_callback_query()` acknowledges an interaction.
 
 The client uses Python's standard library and has no runtime dependencies. It is
 synchronous and intentionally small. Applications remain responsible for retry
 policy (including honoring `TelegramApiError.retry_after`), logging, persistence,
 scheduling, and secret management. The client never retries automatically.
+
+## Callback queries (opt-in)
+
+Existing bots still receive only message updates. Interactive bots can request
+callback updates explicitly:
+
+```python
+from telegram_bot_core import (
+    TelegramAccessPolicy,
+    TelegramBotApi,
+    inline_keyboard,
+    parse_telegram_callback_query,
+)
+
+api = TelegramBotApi("BOT_TOKEN")
+policy = TelegramAccessPolicy(
+    allowed_user_ids=frozenset({123456}),
+    allowed_chat_ids=frozenset({-1001234}),
+)
+api.send_message(
+    -1001234,
+    "Choose an action",
+    reply_markup=inline_keyboard([[("Refresh", "refresh"), ("Details", "details")]]),
+)
+
+updates = api.get_updates(
+    offset=None, timeout=30, allowed_updates=("message", "callback_query")
+)
+for update in updates:
+    callback = parse_telegram_callback_query(update)
+    if callback is None:
+        continue
+    # Inline callbacks may have no chat context; enforce your access policy.
+    if callback.chat_id is None or not policy.allows(callback.user_id, callback.chat_id):
+        continue
+    # Interpret callback.data only after authorization; never execute it as code.
+    api.answer_callback_query(callback.id, text="Received")
+```
+
+The caller still owns offset persistence, authorization, callback-data routing,
+confirmation for sensitive operations, and retry policy. A callback's `data`
+value is untrusted user input and never triggers any action inside the core.
+The inline-keyboard helper supports callback-data buttons only (not URL/login
+buttons).
 
 ## Development
 
