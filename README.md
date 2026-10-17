@@ -37,7 +37,7 @@ from telegram_bot_core import (
     parse_telegram_ids,
 )
 
-allowed_users = parse_telegram_ids("123456,789012", setting="ALLOWED_USERS")
+allowed_users = parse_telegram_ids("123456,789012", setting_name="ALLOWED_USERS")
 policy = TelegramAccessPolicy(allowed_user_ids=allowed_users, allowed_chat_ids={-1001234})
 
 command = parse_telegram_command("/status verbose")
@@ -52,7 +52,7 @@ environment file or secret store owned by the application.
 
 - `TelegramBotApi` calls JSON Bot API methods and uploads local documents with
   `sendDocument`. Mutating calls do not retry automatically.
-- `TelegramApiError` reports unsuccessful Telegram responses.
+- `TelegramApiError` exposes `method`, `description`, `error_code`, `parameters`, and an optional integer `retry_after` for Bot API errors, including Telegram JSON bodies returned with HTTP 400/429. Diagnostic fields redact the configured bot token; unrelated non-JSON HTTP failures remain urllib errors.
 - `TelegramAccessPolicy` authorizes users and chats. Missing allowlists fail
   closed instead of granting access.
 - `parse_telegram_ids()` accepts JSON lists, comma-separated strings, and native
@@ -66,7 +66,8 @@ environment file or secret store owned by the application.
 
 The client uses Python's standard library and has no runtime dependencies. It is
 synchronous and intentionally small. Applications remain responsible for retry
-policy, logging, persistence, scheduling, and secret management.
+policy (including honoring `TelegramApiError.retry_after`), logging, persistence,
+scheduling, and secret management. The client never retries automatically.
 
 ## Development
 

@@ -2,23 +2,83 @@
 
 from __future__ import annotations
 
+import io
 import json
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib import request
+from urllib import error, request
 
 
 @dataclass(frozen=True, slots=True)
 class TelegramApiError(RuntimeError):
-    """An unsuccessful response from Telegram's Bot API."""
+    """A Telegram Bot API rejection with structured, token-redacted details."""
 
     method: str
     description: str
+    error_code: int | None = None
+    parameters: dict[str, Any] | None = None
+    retry_after: int | None = None
+
+    def __post_init__(self) -> None:
+        # Retain the historical two-element BaseException.args.
+        RuntimeError.__init__(self, self.method, self.description)
+
+    def __reduce__(self) -> tuple[type[TelegramApiError], tuple[Any, ...]]:
+        # Rebuild all structured fields across pickle/process boundaries.
+        return (
+            type(self),
+            (self.method, self.description, self.error_code, self.parameters, self.retry_after),
+        )
 
     def __str__(self) -> str:
         return f"Telegram API {self.method} failed: {self.description}"
+
+
+def _redact_token(value: Any, token: str) -> Any:
+    """Keep Telegram's diagnostic fields without echoing the Bot API token."""
+    if isinstance(value, str):
+        return value.replace(token, "[REDACTED]")
+    if isinstance(value, dict):
+        return {
+            _redact_token(key, token): _redact_token(item, token) for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_token(item, token) for item in value]
+    return value
+
+
+def _api_error(
+    method: str,
+    payload: object,
+    token: str,
+    *,
+    http_status: int | None = None,
+) -> TelegramApiError:
+    if not isinstance(payload, dict):
+        return TelegramApiError(method, "invalid API response", error_code=http_status)
+
+    description = payload.get("description")
+    if not isinstance(description, str):
+        description = "invalid API response"
+    error_code = payload.get("error_code")
+    if isinstance(error_code, bool) or not isinstance(error_code, int):
+        error_code = http_status
+
+    raw_parameters = payload.get("parameters")
+    parameters = _redact_token(raw_parameters, token) if isinstance(raw_parameters, dict) else None
+    retry_after = parameters.get("retry_after") if parameters is not None else None
+    if isinstance(retry_after, bool) or not isinstance(retry_after, int) or retry_after < 0:
+        retry_after = None
+
+    return TelegramApiError(
+        method=method,
+        description=_redact_token(description, token),
+        error_code=error_code,
+        parameters=parameters,
+        retry_after=retry_after,
+    )
 
 
 class TelegramBotApi:
@@ -92,15 +152,33 @@ class TelegramBotApi:
             headers=headers,
             method="POST",
         )
-        with request.urlopen(req, timeout=self._timeout) as response:
-            parsed = json.loads(response.read().decode("utf-8", errors="replace"))
+        try:
+            with request.urlopen(req, timeout=self._timeout) as response:
+                parsed = json.loads(response.read().decode("utf-8", errors="replace"))
+        except error.HTTPError as exc:
+            # Telegram often returns JSON with HTTP 4xx. urllib's HTTPError
+            # delegates read() to the original stream, so replace *all* of
+            # its read accessors after inspection to preserve the body for
+            # callers handling non-Telegram failures themselves.
+            try:
+                body = exc.read()
+            except OSError:
+                raise exc
+            replay = io.BytesIO(body)
+            exc.fp = replay
+            exc.file = replay
+            exc.read = replay.read
+            exc.readline = replay.readline
+            exc.readlines = replay.readlines
+            try:
+                parsed = json.loads(body.decode("utf-8", errors="replace"))
+            except ValueError:
+                raise exc
+            if isinstance(parsed, dict) and parsed.get("ok") is False:
+                raise _api_error(method, parsed, self._token, http_status=exc.code) from exc
+            raise exc
         if not isinstance(parsed, dict) or parsed.get("ok") is not True:
-            description = (
-                parsed.get("description", "invalid API response")
-                if isinstance(parsed, dict)
-                else "invalid API response"
-            )
-            raise TelegramApiError(method, str(description))
+            raise _api_error(method, parsed, self._token)
         return parsed
 
     def send_message(self, chat_id: int, text: str) -> dict[str, Any]:
