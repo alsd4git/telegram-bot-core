@@ -131,8 +131,8 @@ uv run pytest
 uv build
 ```
 
-CI runs the suite on Linux, macOS, and Windows with the oldest and newest
-supported Python versions.
+CI runs tests on Linux, macOS, and Windows with Python 3.11–3.15, plus Python
+3.10 on Linux. Formatting and lint run once on Linux with Python 3.15.
 
 ## Releases
 
